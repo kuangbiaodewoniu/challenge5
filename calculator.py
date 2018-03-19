@@ -14,6 +14,8 @@
 import sys, csv
 from multiprocessing import Queue, Process
 from getopt import getopt
+from datetime import datetime
+import configparser
 
 
 # 税率配置
@@ -126,7 +128,11 @@ def calc_real_wages(job_num,wages,JShuL,JShuH,YangLao,YiLiao,ShiYe,GongShang,She
         real_wages = 0
     # 工号, 税前工资, 社保金额, 个税金额, 税后工资
     # print ([job_num, wages, format(insurance,'.2f'), format(taxes_amount,'.2f'), format(real_wages,'.2f')])
-    return [job_num, int(wages), format(insurance,'.2f'), format(taxes_amount,'.2f'), format(real_wages,'.2f')]
+    # 增加计算时间
+    now = datetime.now()
+    current_format_time = datetime.strftime(now, "%Y-%m-%d %H:%M:%S")
+
+    return [job_num, int(wages), format(insurance,'.2f'), format(taxes_amount,'.2f'), format(real_wages,'.2f'), current_format_time]
 
 
 def get_user_info(file_path, queue):
@@ -135,22 +141,47 @@ def get_user_info(file_path, queue):
     queue.put(user_data)
 
 
+# 获取城市
+def get_city():
+    opts, args = getopt(sys.argv[1:], 'C')
+    return args[0].upper()
+
+
 def calculate_salary(file_path, queue_in, queue_out):
     all_salary_data=[]
     user_data = queue_in.get()
-    config = Config(file_path)
-    JShuL = config.get_config_item('JiShuL')
-    JShuH = config.get_config_item('JiShuH')
-    YangLao = config.get_config_item('YangLao')
-    YiLiao = config.get_config_item('YiLiao')
-    ShiYe = config.get_config_item('ShiYe')
-    GongShang = config.get_config_item('GongShang')
-    ShengYu = config.get_config_item('ShengYu')
-    GongJiJin = config.get_config_item('GongJiJin')
+    # config = Config(file_path)
+    # JShuL = config.get_config_item('JiShuL')
+    # JShuH = config.get_config_item('JiShuH')
+    # YangLao = config.get_config_item('YangLao')
+    # YiLiao = config.get_config_item('YiLiao')
+    # ShiYe = config.get_config_item('ShiYe')
+    # GongShang = config.get_config_item('GongShang')
+    # ShengYu = config.get_config_item('ShengYu')
+    # GongJiJin = config.get_config_item
+
+    # 切换获取配置文件的方式
+    city = get_city()
+    # city = 'CHENGDU'
+    config = configparser.RawConfigParser()
+    config.read(file_path)
+    # 获取所有的section
+    sections = config.sections()
+    if city not in sections:
+        city = 'DEFAULT'
+
+    JiShuL = config.getfloat(city, 'JiShuL')
+    JiShuH = config.getfloat(city, 'JiShuH')
+    YangLao = config.getfloat(city, 'YangLao')
+    YiLiao = config.getfloat(city, 'YiLiao')
+    ShiYe = config.getfloat(city, 'ShiYe')
+    GongShang = config.getfloat(city, 'GongShang')
+    ShengYu = config.getfloat(city, 'ShengYu')
+    GongJiJin = config.getfloat(city, 'GongJiJin')
 
     for user_num, wage in user_data.items():
         # 计算工资
-        wage_detail = calc_real_wages(user_num, wage, JShuL, JShuH, YangLao, YiLiao, ShiYe, GongShang, ShengYu,GongJiJin)
+        wage_detail = calc_real_wages(user_num, wage, JiShuL, JiShuH, YangLao, YiLiao, ShiYe, GongShang, ShengYu,GongJiJin)
         all_salary_data.append(wage_detail)
     queue_out.put(all_salary_data)
 
@@ -168,8 +199,11 @@ def main():
     usr_info_config_path = ''
     wages_detail_config_path = ''
     try:
-        opts, args = getopt(sys.argv[1:], 'C:c:d:o:')
+        opts, args = getopt(sys.argv[1:], 'hC:c:d:o:', ['help'])
         for opt, arg in opts:
+            if opt in ('-h', '--help'):
+                print('Usage: calculator.py -C cityname -c configfile -d userdata -o resultdata')
+                return
             if opt == ('-C'):
                 city = arg.upper()
             if opt == ('-c'):
